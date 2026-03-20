@@ -1,0 +1,30 @@
+#!/bin/bash
+
+mkdir -p build
+cd build
+
+cmake ..
+make -j4
+
+cd ..
+
+TEST_FILES=(
+    "gc_50_3"
+    "gc_70_7"
+    "gc_100_5"
+    "gc_250_9"
+    "gc_500_1"
+    "gc_1000_5"
+)
+
+TEST_DIR="tests"
+
+for file in "${TEST_FILES[@]}"; do
+    full_path="$TEST_DIR/$file"
+    if [ -f "$full_path" ]; then
+        result=$(bin/coloring "$full_path" | awk '{print $1; exit}')
+        echo "$file ... $result"
+    else
+        echo -e "${RED}$file ... файл не найден в $TEST_DIR/"
+    fi
+done
