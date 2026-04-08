@@ -1,0 +1,30 @@
+#!/bin/bash
+
+mkdir -p build
+cd build
+
+cmake ..
+make -j4
+
+cd ..
+
+TEST_FILES=(
+    "vrp_16_3_1"
+    "vrp_26_8_1"
+    "vrp_51_5_1"
+    "vrp_101_10_1"
+    "vrp_200_16_1"
+    "vrp_421_41_1"
+)
+
+TEST_DIR="tests"
+
+for file in "${TEST_FILES[@]}"; do
+    full_path="$TEST_DIR/$file"
+    if [ -f "$full_path" ]; then
+        result=$(bin/vrp "$full_path" | awk '{print $1; exit}')
+        echo "$file ... $result"
+    else
+        echo -e "${RED}$file ... файл не найден в $TEST_DIR/"
+    fi
+done
