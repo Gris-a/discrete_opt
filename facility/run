@@ -1,0 +1,30 @@
+#!/bin/bash
+
+mkdir -p build
+cd build
+
+cmake ..
+make -j4
+
+cd ..
+
+TEST_FILES=(
+    "fl_25_2"
+    "fl_100_1"
+    "fl_200_7"
+    "fl_500_7"
+    "fl_1000_2"
+    "fl_2000_2"
+)
+
+TEST_DIR="tests"
+
+for file in "${TEST_FILES[@]}"; do
+    full_path="$TEST_DIR/$file"
+    if [ -f "$full_path" ]; then
+        result=$(bin/facility "$full_path" | awk '{print $1; exit}')
+        echo "$file ... $result"
+    else
+        echo -e "${RED}$file ... файл не найден в $TEST_DIR/"
+    fi
+done

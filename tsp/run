@@ -1,0 +1,30 @@
+#!/bin/bash
+
+mkdir -p build
+cd build
+
+cmake ..
+make -j4
+
+cd ..
+
+TEST_FILES=(
+    "tsp_51_1"
+    "tsp_100_3"
+    "tsp_200_2"
+    "tsp_574_1"
+    "tsp_1889_1"
+    "tsp_33810_1"
+)
+
+TEST_DIR="tests"
+
+for file in "${TEST_FILES[@]}"; do
+    full_path="$TEST_DIR/$file"
+    if [ -f "$full_path" ]; then
+        result=$(bin/tsp "$full_path" | awk '{print $1; exit}')
+        echo "$file ... $result"
+    else
+        echo -e "${RED}$file ... файл не найден в $TEST_DIR/"
+    fi
+done
