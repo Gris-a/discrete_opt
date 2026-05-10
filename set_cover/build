@@ -1,3 +1,0 @@
-#!/bin/bash
-
-g++ -std=c++20 set_cover.cpp -o set_cover

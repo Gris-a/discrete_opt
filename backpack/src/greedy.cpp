@@ -181,8 +181,10 @@ int main(int argc, char** argv) {
     auto [cost, result] = solve_bb(n, W, items);
 
     std::cout << cost << "\n";
-    for (const auto &item : result) {
-        std::cout << item << ' ';
+    for (size_t i = 0; i < n; ++i) {
+        if (result[i]) {
+            std::cout << i << ' ';
+        }
     }
     std::cout << std::endl;
     
