@@ -13,4 +13,5 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(cli11)
 
 add_executable(tsp src/greedy.cpp)
+target_compile_options(tsp PRIVATE -O3)
 target_link_libraries(tsp PRIVATE CLI11::CLI11)

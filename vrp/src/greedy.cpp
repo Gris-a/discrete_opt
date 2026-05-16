@@ -3,6 +3,9 @@
 #include <iostream>
 #include <fstream>
 #include <tuple>
+#include <iomanip>
+#include <limits>
+
 #include "CLI/CLI.hpp"
 
 CLI::App app{"vrp"};
@@ -11,6 +14,12 @@ struct Point { double demand, x, y; bool visited = false; };
 
 double dist(const Point& a, const Point& b) {
     return std::sqrt(std::pow(a.x - b.x, 2) + std::pow(a.y - b.y, 2));
+}
+
+double dist2(const Point& a, const Point& b) {
+    double dx = a.x - b.x;
+    double dy = a.y - b.y;
+    return dx * dx + dy * dy;
 }
 
 std::tuple<size_t, size_t, double, std::vector<Point>> read_data(const std::string &filename) {
@@ -38,11 +47,11 @@ std::pair<double, std::vector<std::vector<size_t>>> vrp_greedy(size_t n, size_t 
         
         while (true) {
             size_t best_next = 0;
-            double min_dist = 1e15;
+            double min_dist = std::numeric_limits<double>::infinity();
             
             for (size_t j = 1; j < n; ++j) {
                 if (!pts[j].visited && pts[j].demand <= current_cap) {
-                    double d = dist(pts[current_pos], pts[j]);
+                    double d = dist2(pts[current_pos], pts[j]);
                     if (d < min_dist) {
                         min_dist = d;
                         best_next = j;
@@ -55,7 +64,7 @@ std::pair<double, std::vector<std::vector<size_t>>> vrp_greedy(size_t n, size_t 
             routes[i].push_back(best_next);
             pts[best_next].visited = true;
             current_cap -= pts[best_next].demand;
-            total_cost += min_dist;
+            total_cost += std::sqrt(min_dist);
             current_pos = best_next;
         }
         
@@ -68,6 +77,8 @@ std::pair<double, std::vector<std::vector<size_t>>> vrp_greedy(size_t n, size_t 
 }
 
 int main(int argc, char* argv[]) {
+    std::cout << std::fixed << std::setprecision(6);
+
     std::string filename;
     app.add_option("source", filename)->required()->check(CLI::ExistingFile);
 
