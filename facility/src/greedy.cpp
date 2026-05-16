@@ -2,6 +2,7 @@
 #include <cmath>
 #include <iostream>
 #include <fstream>
+#include <iomanip>
 #include <tuple>
 #include "CLI/CLI.hpp"
 
@@ -38,20 +39,20 @@ std::pair<double, std::vector<int>> facility_greedy(size_t N, size_t M, std::vec
 
     for (size_t i = 0; i < M; ++i) {
         int best_fac = -1;
-        double best_score = 1e15;
+        double best_score = std::numeric_limits<double>::infinity();
 
         for (size_t j = 0; j < N; ++j) {
             if (facs[j].used_cap + custs[i].demand <= facs[j].cap) {
                 double d = dist(custs[i].x, custs[i].y, facs[j].x, facs[j].y);
-                double score = d + (facs[j].open ? 0 : facs[j].cost); 
-                
+                double score = d + (facs[j].open ? 0 : facs[j].cost);
+
                 if (score < best_score) {
                     best_score = score;
-                    best_fac = j;
+                    best_fac = (int)j;
                 }
             }
         }
-        
+
         if (best_fac != -1) {
             assignments[i] = best_fac;
             facs[best_fac].used_cap += custs[i].demand;
@@ -67,6 +68,8 @@ std::pair<double, std::vector<int>> facility_greedy(size_t N, size_t M, std::vec
 }
 
 int main(int argc, char* argv[]) {
+    std::cout << std::fixed << std::setprecision(6);
+
     std::string filename;
     app.add_option("source", filename)->required()->check(CLI::ExistingFile);
 
@@ -74,7 +77,7 @@ int main(int argc, char* argv[]) {
 
     auto [N, M, facs, custs] = read_data(filename);
     auto [cost, assignments] = facility_greedy(N, M, facs, custs);
-    
+
     std::cout << cost << '\n';
     for (const auto &f : assignments) {
         std::cout << f << ' ';

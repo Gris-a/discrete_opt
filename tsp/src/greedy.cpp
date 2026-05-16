@@ -105,10 +105,10 @@ void tsp_2opt_internal(std::vector<size_t> &path, double &total_cost, size_t n, 
     }
 }
 
-std::pair<double, std::vector<size_t>> tsp_2opt(size_t n, const std::vector<Point> &pts) {
+std::pair<double, std::vector<size_t>> tsp_2opt(size_t n, const std::vector<Point> &pts, std::chrono::seconds time_limit = std::chrono::seconds(60)) {
     auto start = std::chrono::steady_clock::now();
     auto [total_cost, path] = tsp_greedy(n, pts);
-    auto end_time = start + std::chrono::seconds(60);
+    auto end_time = start + time_limit;
     tsp_2opt_internal(path, total_cost, n, pts, end_time);
     return {total_cost, path};
 }
@@ -142,11 +142,11 @@ double calculate_total_cost(const std::vector<size_t> &path, const std::vector<P
     return cost;
 }
 
-std::pair<double, std::vector<size_t>> tsp_annealing(size_t n, const std::vector<Point> &pts) {
+std::pair<double, std::vector<size_t>> tsp_annealing(size_t n, const std::vector<Point> &pts, std::chrono::seconds time_limit = std::chrono::seconds(30)) {
     auto overall_start = std::chrono::steady_clock::now();
     auto [current_cost, current_path] = tsp_greedy(n, pts);
     
-    auto overall_end = overall_start + std::chrono::seconds(60);
+    auto overall_end = overall_start + time_limit;
     auto polish_end = std::min(overall_end, overall_start + std::chrono::seconds(20));
     tsp_2opt_internal(current_path, current_cost, n, pts, polish_end);
 
