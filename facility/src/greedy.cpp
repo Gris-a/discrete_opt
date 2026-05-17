@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iomanip>
 #include <tuple>
+#include <limits>
 #include <random>
 
 #include "CLI/CLI.hpp"
@@ -185,14 +186,14 @@ std::pair<double, std::vector<int>> facility_annealing(size_t N, size_t M, const
     std::vector<double> temp_used_cap(N);
     std::vector<int> temp_open_count(N);
 
-    std::mt19937 rng(1337);
+    std::mt19937 rng(137);
     std::uniform_real_distribution<double> dist_u(0.0, 1.0);
     std::uniform_int_distribution<size_t> rand_cust(0, M - 1);
     std::uniform_int_distribution<size_t> rand_fac(0, N - 1);
 
-    double T = 1000;
+    double T = 900;
     const double alpha = 0.99995;
-    size_t max_iterations = 2000000;
+    size_t max_iterations = 2500000;
 
     for (size_t iter = 0; iter < max_iterations; ++iter) {
         auto now = std::chrono::steady_clock::now();
@@ -236,7 +237,7 @@ std::pair<double, std::vector<int>> facility_annealing(size_t N, size_t M, const
             if (f1 == f2 || f1 == -1 || f2 == -1) continue;
 
             if (used_cap[f1] - custs[i1].demand + custs[i2].demand <= facs[f1].cap &&
-                used_cap[f2] - custs[f2].demand + custs[i1].demand <= facs[f2].cap) {
+                used_cap[f2] - custs[i2].demand + custs[i1].demand <= facs[f2].cap) {
                 
                 double delta = dist_matrix[i1][f2] + dist_matrix[i2][f1] - dist_matrix[i1][f1] - dist_matrix[i2][f2];
 
