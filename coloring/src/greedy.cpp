@@ -334,6 +334,119 @@ bool apply_simulated_annealing(size_t n, const std::vector<std::vector<size_t>> 
     return (E == 0);
 }
 
+bool apply_simulated_annealing_improved(size_t n, const std::vector<std::vector<size_t>> &adj, size_t k, std::vector<ssize_t> &coloring) {
+    std::mt19937 rng(137);
+    
+    for (size_t i = 0; i < n; ++i) {
+        if (coloring[i] >= (ssize_t)k) {
+            int min_conflicts = std::numeric_limits<int>::max();
+            std::vector<ssize_t> best_colors;
+            
+            for (ssize_t c = 0; c < (ssize_t)k; ++c) {
+                int current_conflicts = 0;
+                for (size_t v : adj[i]) {
+                    if (coloring[v] == c) current_conflicts++;
+                }
+                if (current_conflicts < min_conflicts) {
+                    min_conflicts = current_conflicts;
+                    best_colors.clear();
+                    best_colors.push_back(c);
+                } else if (current_conflicts == min_conflicts) {
+                    best_colors.push_back(c);
+                }
+            }
+            coloring[i] = best_colors[rng() % best_colors.size()];
+        }
+    }
+
+    std::vector<std::vector<int>> adj_conflicts(n, std::vector<int>(k, 0));
+    for (size_t u = 0; u < n; ++u) {
+        for (size_t v : adj[u]) {
+            adj_conflicts[u][coloring[v]]++;
+        }
+    }
+
+    int E = 0;
+    for (size_t u = 0; u < n; ++u) {
+        E += adj_conflicts[u][coloring[u]];
+    }
+    E /= 2;
+
+    double T = 300;
+    double alpha = 0.99995;
+    size_t max_iters = 500000;
+    size_t max_attempts = 100;
+
+    std::uniform_real_distribution<double> dist(0.0, 1.0);
+
+    for (size_t step = 0; step < max_iters; ++step) {
+        if (E == 0) return true;
+
+        size_t u = rng() % n;
+        int attempts = 0;
+        while (adj_conflicts[u][coloring[u]] == 0 && attempts < max_attempts) {
+            u = rng() % n;
+            attempts++;
+        }
+        if (adj_conflicts[u][coloring[u]] == 0) {
+            for (size_t i = 0; i < n; ++i) {
+                if (adj_conflicts[i][coloring[i]] > 0) { u = i; break; }
+            }
+        }
+
+        ssize_t old_color = coloring[u];
+        ssize_t new_color = -1;
+
+        if (k > 1 && dist(rng) < 0.5) { 
+            int min_c_conflicts = std::numeric_limits<int>::max();
+            std::vector<ssize_t> best_c;
+            
+            for (ssize_t c = 0; c < (ssize_t)k; ++c) {
+                if (c == old_color) continue;
+                
+                if (adj_conflicts[u][c] < min_c_conflicts) {
+                    min_c_conflicts = adj_conflicts[u][c];
+                    best_c.clear();
+                    best_c.push_back(c);
+                } else if (adj_conflicts[u][c] == min_c_conflicts) {
+                    best_c.push_back(c);
+                }
+            }
+            new_color = best_c[rng() % best_c.size()];
+        } else {
+            new_color = rng() % k;
+            while (new_color == old_color && k > 1) {
+                new_color = rng() % k;
+            }
+        }
+
+        int delta = adj_conflicts[u][new_color] - adj_conflicts[u][old_color];
+
+        bool accept = false;
+        if (delta <= 0) {
+            accept = true;
+        } else {
+            double p = std::exp(-delta / T);
+            if (dist(rng) < p) {
+                accept = true;
+            }
+        }
+
+        if (accept) {
+            for (size_t v : adj[u]) {
+                adj_conflicts[v][old_color]--;
+                adj_conflicts[v][new_color]++;
+            }
+            coloring[u] = new_color;
+            E += delta;
+        }
+
+        T *= alpha;
+    }
+
+    return (E == 0);
+}
+
 std::pair<size_t, std::vector<ssize_t>> kempe(size_t n, const std::vector<std::vector<size_t>> &adj) {
     auto [best_max, best_color] = dsatur(n, adj);
     auto [max_rlf, color_rlf] = rlf(n, adj);
@@ -367,7 +480,39 @@ std::pair<size_t, std::vector<ssize_t>> simulated_annealing(size_t n, const std:
 
         if (apply_simulated_annealing(n, adj, target_k, working_coloring)) {
             current_k = target_k;
-            current_coloring = working_coloring;
+            current_coloring = std::move(working_coloring);
+        } else break;
+    }
+
+    ssize_t final_max = 0;
+    for (size_t i = 0; i < n; ++i) {
+        if (current_coloring[i] > final_max) final_max = current_coloring[i];
+    }
+
+    return {(size_t)final_max, current_coloring};
+}
+
+std::pair<size_t, std::vector<ssize_t>> simulated_annealing_improved(size_t n, const std::vector<std::vector<size_t>> &adj) {
+    auto [best_max, best_color] = dsatur(n, adj);
+    auto [max_rlf, color_rlf] = rlf(n, adj);
+
+    if (max_rlf < best_max) {
+        best_max = max_rlf;
+        best_color = std::move(color_rlf);
+    }
+
+    apply_kempe_chains(n, adj, best_max, best_color);
+
+    size_t current_k = best_max + 1;
+    std::vector<ssize_t> current_coloring = best_color;
+
+    while (current_k > 1) {
+        size_t target_k = current_k - 1;
+        std::vector<ssize_t> working_coloring = current_coloring;
+
+        if (apply_simulated_annealing_improved(n, adj, target_k, working_coloring)) {
+            current_k = target_k;
+            current_coloring = std::move(working_coloring);
         } else break;
     }
 
@@ -386,7 +531,7 @@ int main(int argc, char* argv[]) {
     CLI11_PARSE(app, argc, argv);
 
     auto [n, m, adj] = read_data(filename);
-    auto [max, coloring] = simulated_annealing(n, adj);
+    auto [max, coloring] = simulated_annealing_improved(n, adj);
     
     std::cout << max + 1 << '\n';
     for (const auto &color : coloring)
