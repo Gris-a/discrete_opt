@@ -13,4 +13,5 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(cli11)
 
 add_executable(vrp src/greedy.cpp)
+target_compile_options(vrp PRIVATE -O3)
 target_link_libraries(vrp PRIVATE CLI11::CLI11)

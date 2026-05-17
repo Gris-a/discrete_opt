@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "CLI/CLI.hpp"
+#include <random>
 
 CLI::App app{"vrp"};
 
@@ -243,6 +244,263 @@ std::pair<double, std::vector<std::vector<size_t>>> vrp_greedy(size_t n, size_t 
     return best;
 }
 
+
+double get_total_cost(const std::vector<std::vector<size_t>>& routes, const std::vector<Point>& pts) {
+    double total_cost = 0.0;
+    for (const auto& route : routes) {
+        if (route.empty()) continue;
+        total_cost += dist(pts[0], pts[route.front()]);
+        for (size_t i = 1; i < route.size(); ++i) {
+            total_cost += dist(pts[route[i - 1]], pts[route[i]]);
+        }
+        total_cost += dist(pts[route.back()], pts[0]);
+    }
+    return total_cost;
+}
+
+bool validate_solution(
+    const std::vector<std::vector<size_t>>& routes,
+    size_t n,
+    size_t v,
+    double c,
+    const std::vector<Point>& pts,
+    std::string& error
+) {
+    if (routes.size() != v) {
+        error = "invalid number of vehicle routes";
+        return false;
+    }
+
+    std::vector<bool> seen(n, false);
+    seen[0] = true;
+
+    for (size_t i = 0; i < v; ++i) {
+        double load = 0.0;
+        for (size_t node : routes[i]) {
+            if (node == 0 || node >= n) {
+                error = "route contains invalid customer index";
+                return false;
+            }
+            if (seen[node]) {
+                error = "customer visited more than once or missing";
+                return false;
+            }
+            seen[node] = true;
+            load += pts[node].demand;
+        }
+        if (load > c + 1e-9) {
+            error = "vehicle capacity exceeded";
+            return false;
+        }
+    }
+
+    for (size_t i = 1; i < n; ++i) {
+        if (!seen[i]) {
+            error = "not all customers were served";
+            return false;
+        }
+    }
+
+    return true;
+}
+
+std::pair<double, std::vector<std::vector<size_t>>> vrp_local_search(size_t n, size_t v, double c, const std::vector<Point>& pts, std::vector<std::vector<size_t>> initial_routes) 
+{
+    std::mt19937 rng(137);
+    int max_iterations = 80000;
+    
+    auto best_routes = initial_routes;
+    double best_cost = get_total_cost(best_routes, pts);
+    
+    auto current_routes = best_routes;
+    double current_cost = best_cost;
+
+    size_t num_to_remove = std::max<size_t>(1, static_cast<size_t>(n * 0.15));
+
+    for (int iter = 0; iter < max_iterations; ++iter) {
+        std::vector<std::vector<size_t>> loop_routes = current_routes;
+        std::vector<bool> removed(n, false);
+        std::vector<size_t> removed_customers;
+
+        std::vector<size_t> all_customers;
+        for (size_t i = 1; i < n; ++i) all_customers.push_back(i);
+        std::shuffle(all_customers.begin(), all_customers.end(), rng);
+
+        for (size_t i = 0; i < num_to_remove; ++i) {
+            removed[all_customers[i]] = true;
+            removed_customers.push_back(all_customers[i]);
+        }
+
+        std::vector<double> remaining_capacity(v, c);
+        for (size_t j = 0; j < v; ++j) {
+            std::vector<size_t> clean_route;
+            for (size_t node : loop_routes[j]) {
+                if (!removed[node]) {
+                    clean_route.push_back(node);
+                    remaining_capacity[j] -= pts[node].demand;
+                }
+            }
+            loop_routes[j] = std::move(clean_route);
+        }
+
+        std::sort(removed_customers.begin(), removed_customers.end(), [&](size_t a, size_t b) {
+            return pts[a].demand > pts[b].demand;
+        });
+
+        bool success = true;
+        for (size_t cust : removed_customers) {
+            size_t best_v = v;
+            size_t best_pos = 0;
+            double min_delta = std::numeric_limits<double>::infinity();
+
+            for (size_t j = 0; j < v; ++j) {
+                if (remaining_capacity[j] < pts[cust].demand) continue;
+
+                for (size_t pos = 0; pos <= loop_routes[j].size(); ++pos) {
+                    size_t prev = (pos == 0) ? 0 : loop_routes[j][pos - 1];
+                    size_t next = (pos == loop_routes[j].size()) ? 0 : loop_routes[j][pos];
+
+                    double delta = dist(pts[prev], pts[cust]) + dist(pts[cust], pts[next]) - dist(pts[prev], pts[next]);
+                    if (delta < min_delta) {
+                        min_delta = delta;
+                        best_v = j;
+                        best_pos = pos;
+                    }
+                }
+            }
+
+            if (best_v == v) {
+                success = false;
+                break;
+            }
+
+            loop_routes[best_v].insert(loop_routes[best_v].begin() + best_pos, cust);
+            remaining_capacity[best_v] -= pts[cust].demand;
+        }
+
+        if (!success) continue;
+
+        for (size_t j = 0; j < v; ++j) {
+            route_2opt(loop_routes[j], pts);
+        }
+
+        double loop_cost = get_total_cost(loop_routes, pts);
+
+        if (loop_cost < current_cost) {
+            current_routes = loop_routes;
+            current_cost = loop_cost;
+
+            if (current_cost < best_cost) {
+                best_routes = current_routes;
+                best_cost = current_cost;
+            }
+        }
+    }
+
+    return {best_cost, best_routes};
+}
+
+std::pair<double, std::vector<std::vector<size_t>>> vrp_annealing(size_t n, size_t v, double c, const std::vector<Point>& pts, std::vector<std::vector<size_t>> initial_routes) 
+{
+    std::mt19937 rng(137);
+    double T = 1000;
+    const double alpha = 0.9995;
+    int max_iterations = 200000;
+    
+    auto best_routes = initial_routes;
+    double best_cost = get_total_cost(best_routes, pts);
+    
+    auto current_routes = best_routes;
+    double current_cost = best_cost;
+
+    size_t num_to_remove = std::max<size_t>(1, static_cast<size_t>(n * 0.25));
+
+    for (int iter = 0; iter < max_iterations; ++iter) {
+        std::vector<std::vector<size_t>> loop_routes = current_routes;
+        std::vector<bool> removed(n, false);
+        std::vector<size_t> removed_customers;
+
+        std::vector<size_t> all_customers;
+        for (size_t i = 1; i < n; ++i) all_customers.push_back(i);
+        std::shuffle(all_customers.begin(), all_customers.end(), rng);
+
+        for (size_t i = 0; i < num_to_remove; ++i) {
+            removed[all_customers[i]] = true;
+            removed_customers.push_back(all_customers[i]);
+        }
+
+        std::vector<double> remaining_capacity(v, c);
+        for (size_t j = 0; j < v; ++j) {
+            std::vector<size_t> clean_route;
+            for (size_t node : loop_routes[j]) {
+                if (!removed[node]) {
+                    clean_route.push_back(node);
+                    remaining_capacity[j] -= pts[node].demand;
+                }
+            }
+            loop_routes[j] = std::move(clean_route);
+        }
+
+        std::sort(removed_customers.begin(), removed_customers.end(), [&](size_t a, size_t b) {
+            return pts[a].demand > pts[b].demand;
+        });
+
+        bool success = true;
+        for (size_t cust : removed_customers) {
+            size_t best_v = v;
+            size_t best_pos = 0;
+            double min_delta = std::numeric_limits<double>::infinity();
+
+            for (size_t j = 0; j < v; ++j) {
+                if (remaining_capacity[j] < pts[cust].demand) continue;
+
+                for (size_t pos = 0; pos <= loop_routes[j].size(); ++pos) {
+                    size_t prev = (pos == 0) ? 0 : loop_routes[j][pos - 1];
+                    size_t next = (pos == loop_routes[j].size()) ? 0 : loop_routes[j][pos];
+
+                    double delta = dist(pts[prev], pts[cust]) + dist(pts[cust], pts[next]) - dist(pts[prev], pts[next]);
+                    if (delta < min_delta) {
+                        min_delta = delta;
+                        best_v = j;
+                        best_pos = pos;
+                    }
+                }
+            }
+
+            if (best_v == v) {
+                success = false;
+                break;
+            }
+
+            loop_routes[best_v].insert(loop_routes[best_v].begin() + best_pos, cust);
+            remaining_capacity[best_v] -= pts[cust].demand;
+        }
+
+        if (!success) continue;
+
+        for (size_t j = 0; j < v; ++j) {
+            route_2opt(loop_routes[j], pts);
+        }
+
+        double loop_cost = get_total_cost(loop_routes, pts);
+
+        if (loop_cost < current_cost || std::exp((current_cost - loop_cost) / T) > std::uniform_real_distribution<>(0.0, 1.0)(rng)) {
+            current_routes = loop_routes;
+            current_cost = loop_cost;
+
+            if (current_cost < best_cost) {
+                best_routes = current_routes;
+                best_cost = current_cost;
+            }
+        }
+
+        T *= alpha;
+    }
+
+    return {best_cost, best_routes};
+}
+
+
 int main(int argc, char* argv[]) {
     std::cout << std::fixed << std::setprecision(6);
 
@@ -252,18 +510,23 @@ int main(int argc, char* argv[]) {
     CLI11_PARSE(app, argc, argv);
 
     auto [n, v, c, pts] = read_data(filename);
-    auto [cost, routes] = vrp_greedy(n, v, c, pts);
+    auto [gcost, groutes] = vrp_greedy(n, v, c, pts);
+    auto [cost, routes] = vrp_annealing(n, v, c, pts, groutes);
 
-    if (!routes.empty()) {
-        std::cout << cost << '\n';
-        for (size_t i = 0; i < routes.size(); ++i) {
-            if (!routes[i].empty()) {
-                std::cout << "Vehicle " << i + 1 << ": 0 ";
-                for (size_t node : routes[i]) {
-                    std::cout << node << " ";
-                }
-                std::cout << "0\n";
+    std::string validation_error;
+    if (!validate_solution(routes, n, v, c, pts, validation_error)) {
+        std::cerr << "Invalid solution: " << validation_error << '\n';
+        return 1;
+    }
+
+    std::cout << cost << '\n';
+    for (size_t i = 0; i < routes.size(); ++i) {
+        if (!routes[i].empty()) {
+            std::cout << "Vehicle " << i + 1 << ": 0 ";
+            for (size_t node : routes[i]) {
+                std::cout << node << " ";
             }
+            std::cout << "0\n";
         }
     }
 
