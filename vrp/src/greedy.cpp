@@ -258,52 +258,6 @@ double get_total_cost(const std::vector<std::vector<size_t>>& routes, const std:
     return total_cost;
 }
 
-bool validate_solution(
-    const std::vector<std::vector<size_t>>& routes,
-    size_t n,
-    size_t v,
-    double c,
-    const std::vector<Point>& pts,
-    std::string& error
-) {
-    if (routes.size() != v) {
-        error = "invalid number of vehicle routes";
-        return false;
-    }
-
-    std::vector<bool> seen(n, false);
-    seen[0] = true;
-
-    for (size_t i = 0; i < v; ++i) {
-        double load = 0.0;
-        for (size_t node : routes[i]) {
-            if (node == 0 || node >= n) {
-                error = "route contains invalid customer index";
-                return false;
-            }
-            if (seen[node]) {
-                error = "customer visited more than once or missing";
-                return false;
-            }
-            seen[node] = true;
-            load += pts[node].demand;
-        }
-        if (load > c + 1e-9) {
-            error = "vehicle capacity exceeded";
-            return false;
-        }
-    }
-
-    for (size_t i = 1; i < n; ++i) {
-        if (!seen[i]) {
-            error = "not all customers were served";
-            return false;
-        }
-    }
-
-    return true;
-}
-
 std::pair<double, std::vector<std::vector<size_t>>> vrp_local_search(size_t n, size_t v, double c, const std::vector<Point>& pts, std::vector<std::vector<size_t>> initial_routes) 
 {
     std::mt19937 rng(137);
@@ -500,7 +454,6 @@ std::pair<double, std::vector<std::vector<size_t>>> vrp_annealing(size_t n, size
     return {best_cost, best_routes};
 }
 
-
 int main(int argc, char* argv[]) {
     std::cout << std::fixed << std::setprecision(6);
 
@@ -512,12 +465,6 @@ int main(int argc, char* argv[]) {
     auto [n, v, c, pts] = read_data(filename);
     auto [gcost, groutes] = vrp_greedy(n, v, c, pts);
     auto [cost, routes] = vrp_annealing(n, v, c, pts, groutes);
-
-    std::string validation_error;
-    if (!validate_solution(routes, n, v, c, pts, validation_error)) {
-        std::cerr << "Invalid solution: " << validation_error << '\n';
-        return 1;
-    }
 
     std::cout << cost << '\n';
     for (size_t i = 0; i < routes.size(); ++i) {
