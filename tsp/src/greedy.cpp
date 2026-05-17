@@ -154,7 +154,7 @@ std::pair<double, std::vector<size_t>> tsp_annealing(size_t n, const std::vector
     std::vector<size_t> best_path = current_path;
 
     std::mt19937 gen(1337);
-    std::uniform_real_distribution<double> unif01(0.0, 1.0);
+    std::uniform_real_distribution<double> unif(0.0, 1.0);
 
     double T = 100;
     const double alpha = 0.95;
@@ -171,7 +171,7 @@ std::pair<double, std::vector<size_t>> tsp_annealing(size_t n, const std::vector
         }
 
         double delta = candidate_cost - current_cost;
-        if (delta < 0 || (unif01(gen) < std::exp(-delta / T)))  {
+        if (delta < 0 || (unif(gen) < std::exp(-delta / T)))  {
             current_cost = std::move(candidate_cost);
             current_path = std::move(candidate_path);
             if (current_cost < best_cost) {

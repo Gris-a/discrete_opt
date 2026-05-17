@@ -13,4 +13,5 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(cli11)
 
 add_executable(facility src/greedy.cpp)
+target_compile_options(facility PRIVATE -O3)
 target_link_libraries(facility PRIVATE CLI11::CLI11)
